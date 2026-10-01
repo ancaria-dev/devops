@@ -1,0 +1,47 @@
+name: cloc
+
+on:
+  schedule:
+    - cron: '17 3 * * *'
+  workflow_dispatch:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  cloc:
+    runs-on: ubuntu-latest
+    steps:
+      - id: token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ vars.DEVOPS_APP_ID }}
+          private-key: ${{ secrets.DEVOPS_APP_KEY }}
+          owner: ancaria-dev
+
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+
+      - run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q cloc
+
+      - name: Count lines of code
+        env:
+          GH_TOKEN: ${{ steps.token.outputs.token }}
+        run: python scripts/cloc.py
+
+      - name: Upload badges to R2
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          for file in badges/*.json; do
+            [ -e "$file" ] || continue
+            npx --yes wrangler@4.130.0 r2 object put "ancaria-files/badges/$(basename "$file")" \
+              --file "$file" --content-type application/json --cache-control no-cache --remote
+          done
