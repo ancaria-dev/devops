@@ -1,5 +1,5 @@
 name: train
-run-name: Train ${{ inputs.released }}${{ inputs.versions != '' && format(' {0}', inputs.versions) || '' }}${{ inputs.dry-run && ' (dry run)' || '' }}
+run-name: Train${{ inputs.released != '' && format(' {0}', inputs.released) || '' }}${{ inputs.versions != '' && format(' {0}', inputs.versions) || '' }}${{ inputs.dry-run && ' (dry run)' || '' }}
 
 on:
   workflow_dispatch:
