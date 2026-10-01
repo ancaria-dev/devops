@@ -1,0 +1,61 @@
+name: prepare
+description: Checks a release version and tells whether its GitHub Release already exists.
+
+inputs:
+  version:
+    description: Version to release, MAJOR.MINOR.PATCH[-pre]; a leading v is dropped
+    required: true
+
+outputs:
+  version:
+    description: The version without a leading v
+    value: ${{ steps.prepare.outputs.version }}
+  tag:
+    description: The tag, v<version>
+    value: ${{ steps.prepare.outputs.tag }}
+  done:
+    description: true when the GitHub Release of this version is already published
+    value: ${{ steps.prepare.outputs.done }}
+
+runs:
+  using: composite
+  steps:
+    - id: prepare
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        INPUT_VERSION: ${{ inputs.version }}
+      run: |
+        set -euo pipefail
+        if [ "$RUNNER_OS" = Windows ]; then py=python; else py=python3; fi
+        semver="$GITHUB_ACTION_PATH/../../../scripts/semver.py"
+
+        if ! version=$("$py" "$semver" check "$INPUT_VERSION"); then
+          echo "::error::'$INPUT_VERSION' is not a version. Use MAJOR.MINOR.PATCH or MAJOR.MINOR.PATCH-pre, for example 1.2.0 or 1.2.0-rc.1."
+          exit 1
+        fi
+        tag="v$version"
+        { echo "version=$version"; echo "tag=$tag"; } >> "$GITHUB_OUTPUT"
+
+        draft=$(gh release view "$tag" -R "$GITHUB_REPOSITORY" --json isDraft --jq .isDraft 2>/dev/null || true)
+        if [ "$draft" = false ]; then
+          echo "✅ $tag is already released, every later step is skipped"
+          echo "done=true" >> "$GITHUB_OUTPUT"
+          exit 0
+        fi
+
+        mapfile -t tags < <(gh api "repos/$GITHUB_REPOSITORY/tags" --paginate --jq '.[].name')
+        highest=$("$py" "$semver" max "${tags[@]}")
+        exists=false
+        for t in "${tags[@]}"; do [ "$t" = "$tag" ] && exists=true; done
+        if [ -n "$highest" ] && [ "$exists" = false ] && "$py" "$semver" lt "$version" "$highest"; then
+          echo "::error::$version is lower than the highest tag v$highest. Release a higher version."
+          exit 1
+        fi
+
+        if [ "$draft" = true ]; then
+          echo "📦 $tag has a draft release from an earlier run, finishing it"
+        else
+          echo "📦 releasing $tag (highest tag so far: ${highest:+v}${highest:-none})"
+        fi
+        echo "done=false" >> "$GITHUB_OUTPUT"
