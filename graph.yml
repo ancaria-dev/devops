@@ -1,0 +1,20 @@
+repos: [mappings, agent, coderpack, protocol, build, idea, launcher]
+edges:
+  - { from: mappings,  to: agent, input: mappings }
+  - { from: coderpack, to: build, input: api, paths: ["api/**", "api-kotlin/**", "api-skiko/**", "api-compose/**"] }
+  - { from: build,     to: idea,  input: templates }
+
+# meta.json, built by scripts/meta.py from the latest GitHub Release of each repo.
+# `asset` is a file name pattern that must match exactly one asset of that release.
+meta:
+  schema: 1
+  apiLevel:
+    repo: coderpack
+    path: api/src/main/java/dev/ancaria/coderpack/api/Api.java
+    pattern: 'VERSION\s*=\s*(\d+)'
+  components:
+    launcher: { repo: launcher,  asset: "*.exe" }
+    protocol: { repo: protocol,  asset: protocol.exe }
+    api:      { repo: coderpack, asset: api.jar }
+    zygote:   { repo: coderpack, asset: zygote.jar }
+    agent:    { repo: agent,     asset: agent.zip }
