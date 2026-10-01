@@ -1,0 +1,54 @@
+name: meta
+
+on:
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  meta:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+
+      - run: pip install pyyaml
+
+      - id: meta
+        name: Build meta.json
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python scripts/meta.py
+
+      - name: Upload to R2
+        if: steps.meta.outputs.changed == 'true'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: >-
+          npx --yes wrangler@4.130.0 r2 object put ancaria-files/launcher/meta.json
+          --file meta.json --content-type application/json --cache-control no-cache --remote
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: meta
+          path: meta.json
+
+      - name: Summary
+        env:
+          CHANGED: ${{ steps.meta.outputs.changed }}
+        run: |
+          {
+            echo "## 📜 meta.json"
+            echo
+            if [ "$CHANGED" = true ]; then echo "Uploaded to https://ancaria.dev/files/launcher/meta.json"; else echo "Same as the live file, not uploaded."; fi
+            echo
+            echo '```json'
+            cat meta.json
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
