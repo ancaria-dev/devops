@@ -34,10 +34,10 @@ def badge(lines):
 
 def count(repo, workdir):
     if gh("api", f"repos/{ORG}/{repo}", "--jq", ".name", check=False) is None:
-        log("⏭️", f"{repo}: not on GitHub yet")
+        log("⏭️", f"{repo}: not on GitHub yet, or the token cannot see it")
         return None
     target = Path(workdir) / repo
-    subprocess.run(["git", "clone", "--quiet", "--depth", "1", f"https://github.com/{ORG}/{repo}.git", str(target)], check=True)
+    gh("repo", "clone", f"{ORG}/{repo}", str(target), "--", "--quiet", "--depth", "1")
     out = subprocess.run(["cloc", "--json", "--quiet", f"--exclude-dir={EXCLUDE}", str(target)],
                          capture_output=True, text=True, check=True).stdout
     return json.loads(out)["SUM"]["code"] if out.strip() else 0
