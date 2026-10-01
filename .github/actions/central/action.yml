@@ -1,0 +1,94 @@
+name: central
+description: Checks or waits until every artifact of a version answers on Maven Central (repo1.maven.org).
+
+inputs:
+  version:
+    description: The version, without a leading v
+    required: true
+  artifacts:
+    description: Newline-separated group:artifact coordinates
+    required: true
+  mode:
+    description: check (report once) or wait (poll every 30 s until all are there)
+    default: check
+  timeout-minutes:
+    description: How long wait polls before it fails
+    default: '45'
+
+outputs:
+  published:
+    description: true when every POM answers 200
+    value: ${{ steps.central.outputs.published }}
+
+runs:
+  using: composite
+  steps:
+    - id: central
+      shell: bash
+      env:
+        RELEASE_VERSION: ${{ inputs.version }}
+        ARTIFACTS: ${{ inputs.artifacts }}
+        MODE: ${{ inputs.mode }}
+        TIMEOUT: ${{ inputs.timeout-minutes }}
+      run: |
+        set -euo pipefail
+        version=${RELEASE_VERSION#v}
+        urls=()
+        while IFS= read -r line; do
+          line=$(echo "$line" | tr -d '[:space:]')
+          [ -z "$line" ] && continue
+          if [[ "$line" != *:* ]]; then
+            echo "::error::'$line' is not group:artifact"
+            exit 1
+          fi
+          group=${line%%:*}
+          artifact=${line#*:}
+          urls+=("https://repo1.maven.org/maven2/${group//.//}/$artifact/$version/$artifact-$version.pom")
+        done <<< "$ARTIFACTS"
+        if [ ${#urls[@]} -eq 0 ]; then
+          echo "::error::no artifacts given"
+          exit 1
+        fi
+
+        missing() {
+          for url in "${urls[@]}"; do
+            code=$(curl -s -o /dev/null -I -w '%{http_code}' "$url" || true)
+            [ "$code" = 200 ] || echo "$url"
+          done
+        }
+
+        case "$MODE" in
+          check)
+            gone=$(missing)
+            if [ -z "$gone" ]; then
+              echo "✅ all ${#urls[@]} POMs of $version are on Central"
+              echo "published=true" >> "$GITHUB_OUTPUT"
+            else
+              echo "📦 not on Central yet:"
+              echo "$gone"
+              echo "published=false" >> "$GITHUB_OUTPUT"
+            fi
+            ;;
+          wait)
+            deadline=$((SECONDS + TIMEOUT * 60))
+            while true; do
+              gone=$(missing)
+              if [ -z "$gone" ]; then
+                echo "✅ all ${#urls[@]} POMs of $version are on Central"
+                echo "published=true" >> "$GITHUB_OUTPUT"
+                exit 0
+              fi
+              if [ "$SECONDS" -ge "$deadline" ]; then
+                echo "$gone"
+                echo "::error::these POMs did not appear on Central within $TIMEOUT minutes. Check the deployment at https://central.sonatype.com/publishing/deployments; rerunning this job finishes the release once they are there."
+                exit 1
+              fi
+              echo "⏳ waiting for $(echo "$gone" | wc -l) of ${#urls[@]} POMs"
+              sleep 30
+            done
+            ;;
+          *)
+            echo "::error::mode must be check or wait, got '$MODE'"
+            exit 1
+            ;;
+        esac
