@@ -1,0 +1,67 @@
+name: train
+run-name: Train ${{ inputs.released }}${{ inputs.versions != '' && format(' {0}', inputs.versions) || '' }}${{ inputs.dry-run && ' (dry run)' || '' }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      released:
+        description: repo@version that was just released (set by the finish action)
+        type: string
+        default: ''
+      versions:
+        description: Repositories to release, "coderpack=2.1.0 protocol=2.0.1" or "all=2.0.0"
+        type: string
+        default: ''
+      dry-run:
+        description: Print the plan, release nothing
+        type: boolean
+        default: false
+
+concurrency:
+  group: train
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  train:
+    runs-on: ubuntu-latest
+    steps:
+      - id: token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ vars.DEVOPS_APP_ID }}
+          private-key: ${{ secrets.DEVOPS_APP_KEY }}
+          owner: ancaria-dev
+
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+
+      - run: pip install pyyaml
+
+      - name: Run the train
+        env:
+          GH_TOKEN: ${{ steps.token.outputs.token }}
+          RELEASED: ${{ inputs.released }}
+          VERSIONS: ${{ inputs.versions }}
+          DRY_RUN: ${{ inputs.dry-run }}
+        run: |
+          args=(--released "$RELEASED" --versions "$VERSIONS")
+          if [ "$DRY_RUN" = true ]; then args+=(--dry-run); fi
+          python scripts/train.py "${args[@]}"
+
+  meta:
+    needs: train
+    if: ${{ !inputs.dry-run }}
+    uses: ./.github/workflows/meta.yml
+    secrets: inherit
+
+  cloc:
+    needs: meta
+    if: ${{ !inputs.dry-run }}
+    uses: ./.github/workflows/cloc.yml
+    secrets: inherit
