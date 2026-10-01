@@ -26,28 +26,6 @@ richtigen Reihenfolge. Danach erneuert es `meta.json`, aus der der Launcher
 erfährt, welche Komponenten er herunterlädt. Einmal am Tag zählt es außerdem
 die Codezeilen für die Badges in den READMEs neu.
 
-## Erste Schritte
-
-So veröffentlichst du ein Repository:
-
-1. Öffne dort den Tab Actions und wähle den Workflow `release`.
-2. Drück auf Run workflow und gib eine Version ein, etwa `2.1.0` oder
-   `2.1.0-rc.1`.
-3. Warte, bis der Lauf grün ist. Den Rest erledigt devops.
-
-So veröffentlichst du mehrere Repositorys oder alle auf einmal:
-
-1. Öffne in devops den Workflow `train`.
-2. Trag die Versionen in `versions` ein, getrennt durch Leerzeichen:
-   `coderpack=2.1.0 protocol=2.0.1`. `all=2.0.0` veröffentlicht jedes
-   Repository aus `graph.yml` mit einer Version.
-3. Schalte zuerst `dry-run` ein: Der Zug zeigt seinen Plan und veröffentlicht
-   nichts.
-
-Einen Lauf, der mittendrin abgebrochen ist, startest du einfach neu. Jeder
-Schritt prüft, was schon erledigt ist, und macht den Rest ohne Duplikate
-fertig.
-
 ## Was nach einem Release passiert
 
 Der Schritt `finish` in `release.yml` startet `train.yml` in devops mit
@@ -102,11 +80,6 @@ python scripts/train.py --dry-run --versions "coderpack=2.1.0"
 ```
 
 Der Probelauf nutzt deine eigene Anmeldung bei `gh` und startet nichts.
-
-## Releases
-
-devops hat keine Releases. Die Repositorys rufen seine Actions mit `@master`
-auf, deshalb erreicht eine Änderung hier das nächste Release jedes von ihnen.
 
 ## Lizenz
 

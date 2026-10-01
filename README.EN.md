@@ -25,25 +25,6 @@ Then it refreshes `meta.json`, which tells the launcher which components to
 download. Once a day it also recounts the lines of code behind the README
 badges.
 
-## Getting started
-
-To release one repository:
-
-1. Open its Actions tab and pick the `release` workflow.
-2. Press Run workflow and type a version, such as `2.1.0` or `2.1.0-rc.1`.
-3. Wait for the run to turn green. devops does the rest.
-
-To release several repositories, or all of them:
-
-1. Open the `train` workflow in devops.
-2. List the versions in `versions`, separated by spaces:
-   `coderpack=2.1.0 protocol=2.0.1`. `all=2.0.0` releases every repository in
-   `graph.yml` at one version.
-3. Tick `dry-run` first: the train prints its plan and releases nothing.
-
-A run that failed halfway can simply be rerun. Every step checks what’s
-already done and finishes the rest without duplicates.
-
 ## What happens after a release
 
 The `finish` step of `release.yml` starts devops’ `train.yml` with
@@ -97,11 +78,6 @@ python scripts/train.py --dry-run --versions "coderpack=2.1.0"
 ```
 
 The dry run uses your own `gh` login and starts nothing.
-
-## Releases
-
-devops has no releases. Repositories call its actions at `@master`, so a
-change here reaches the next release of each of them.
 
 ## License
 
