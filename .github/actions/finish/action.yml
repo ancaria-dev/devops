@@ -1,0 +1,100 @@
+name: finish
+description: Publishes the GitHub Release with its assets, then starts the devops release train.
+
+inputs:
+  version:
+    description: The version, without a leading v
+    required: true
+  files:
+    description: Newline-separated globs of release assets; each must match at least one file
+    default: ''
+  notify:
+    description: Dispatch devops train.yml after the release
+    default: 'true'
+  notes:
+    description: Release notes; empty generates them from the commits
+    default: ''
+  app-id:
+    description: GitHub App id (vars.DEVOPS_APP_ID), needed when notify is true
+    default: ''
+  app-key:
+    description: GitHub App private key (secrets.DEVOPS_APP_KEY), needed when notify is true
+    default: ''
+
+runs:
+  using: composite
+  steps:
+    - name: Release
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        GH_REPO: ${{ github.repository }}
+        RELEASE_VERSION: ${{ inputs.version }}
+        FILES: ${{ inputs.files }}
+        NOTES: ${{ inputs.notes }}
+        NOTIFY: ${{ inputs.notify }}
+        APP_ID: ${{ inputs.app-id }}
+        APP_KEY: ${{ inputs.app-key }}
+      run: |
+        set -euo pipefail
+        if [ "$NOTIFY" = true ] && { [ -z "$APP_ID" ] || [ -z "$APP_KEY" ]; }; then
+          echo "::error::notify needs app-id and app-key: create the org variable DEVOPS_APP_ID and the org secret DEVOPS_APP_KEY, or pass notify: false"
+          exit 1
+        fi
+        version=${RELEASE_VERSION#v}
+        tag="v$version"
+
+        shopt -s nullglob globstar
+        IFS=$'\n'
+        assets=()
+        while IFS= read -r pattern; do
+          pattern=$(echo "$pattern" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
+          [ -z "$pattern" ] && continue
+          # shellcheck disable=SC2206
+          matched=($pattern)
+          if [ ${#matched[@]} -eq 0 ]; then
+            echo "::error::no file matches '$pattern'"
+            exit 1
+          fi
+          assets+=("${matched[@]}")
+        done <<< "$FILES"
+        unset IFS
+
+        draft=$(gh release view "$tag" --json isDraft --jq .isDraft 2>/dev/null || true)
+        if [ -z "$draft" ]; then
+          args=(--draft --target "$GITHUB_SHA" --title "$tag")
+          if [ -n "$NOTES" ]; then args+=(--notes "$NOTES"); else args+=(--generate-notes); fi
+          if [[ "$version" == *-* ]]; then args+=(--prerelease); fi
+          gh release create "$tag" "${args[@]}"
+          draft=true
+          echo "📦 created draft $tag at $GITHUB_SHA"
+        fi
+        if [ ${#assets[@]} -gt 0 ]; then
+          gh release upload "$tag" "${assets[@]}" --clobber
+          printf '📦 uploaded %s\n' "${assets[@]}"
+        fi
+        if [ "$draft" = true ]; then
+          gh release edit "$tag" --draft=false
+        fi
+        echo "✅ $tag is released"
+
+    - id: token
+      if: inputs.notify == 'true'
+      uses: actions/create-github-app-token@v2
+      with:
+        app-id: ${{ inputs.app-id }}
+        private-key: ${{ inputs.app-key }}
+        owner: ancaria-dev
+        repositories: devops
+
+    - name: Start the release train
+      if: inputs.notify == 'true'
+      shell: bash
+      env:
+        GH_TOKEN: ${{ steps.token.outputs.token }}
+        RELEASE_VERSION: ${{ inputs.version }}
+      run: |
+        set -euo pipefail
+        released="${GITHUB_REPOSITORY#*/}@${RELEASE_VERSION#v}"
+        gh workflow run train.yml -R ancaria-dev/devops -f released="$released"
+        echo "🚂 started the devops train for $released"
